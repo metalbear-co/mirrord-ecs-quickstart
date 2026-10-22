@@ -1,0 +1,20 @@
+{
+  "target": {
+    "path": "serverless/orders",
+    "namespace": "quickstart"
+  },
+  "key": "quickstart",
+  "feature": {
+    "env": true,
+    "network": {
+      "outgoing": true,
+      "dns": true,
+      "incoming": {
+        "mode": "steal",
+        "http_filter": {
+          "header_filter": "^baggage: .*mirrord-session={{ key }}.*$"
+        }
+      }
+    }
+  }
+}

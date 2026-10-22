@@ -1,0 +1,7 @@
+# MetalBear Cloud mode:
+mirrord_api_key = "metalbear_key_..."
+
+# Or operator-hosted mode, with the mirrord Operator on an EKS cluster:
+# eks_cluster_name = "my-eks-cluster"
+
+# region = "us-east-1"
