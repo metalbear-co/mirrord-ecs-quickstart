@@ -3,6 +3,7 @@
     "path": "serverless/orders",
     "namespace": "quickstart"
   },
+  "operator": false,
   "key": "quickstart",
   "feature": {
     "env": true,

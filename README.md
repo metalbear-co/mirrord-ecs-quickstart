@@ -4,34 +4,32 @@ Run a service on your laptop as if it were running in Amazon ECS. No image build
 
 This repo deploys a small orders API to ECS on Fargate, next to a private Postgres database on RDS. Then you run the same service locally with [mirrord](https://metalbear.com/mirrord/), and see two things:
 
-- **Incoming traffic:** requests to the public load balancer that carry your session header reach the process on your laptop. All other requests still go to the ECS task.
-- **Outgoing traffic:** your local process connects to the RDS database, which has no public endpoint. The connection leaves from the ECS task, inside the VPC. mirrord also gives the local process the task's environment variables, so it gets the database credentials from the task.
+- **Real requests reach your laptop:** requests to the public load balancer that carry your session header reach the process on your laptop. All other requests still go to the ECS task.
+- **Your laptop reads the real database:** your local process reads and writes the orders in the RDS database, which has no public endpoint. mirrord sends the database connection through the ECS task, inside the VPC. It also gives the local process the task's environment variables, so the process gets the database credentials from the task.
 
-```
-                       ┌──────────────── VPC ────────────────────────────┐
- curl ──► ALB ────────►│ ECS task (Fargate)                              │
-          │            │  orders app + mirrord remote bootstrap ──► RDS  │
-          │            └──────────────┬──────────────────────────────────┘
-          │                           │ outbound HTTPS
-          │                 MetalBear sessions-manager
-          │                           │
-          │   with header             ▼
-          └─ baggage: mirrord-session=quickstart ──► your laptop: uvicorn under mirrord exec
-```
+![The client sends requests to the load balancer and the ECS task. The mirrord remote bootstrap in the task sends requests with your header through the MetalBear sessions-manager to the app on your machine. The task connects to the private RDS database for both apps.](assets/ecs-quickstart.svg)
 
-> mirrord for ECS is experimental. You need a MetalBear API key for serverless workloads and the dedicated mirrord CLI build. [Contact us](https://metalbear.com/mirrord/) to get both.
+> mirrord for ECS is experimental, and may change without notice.
 
 ## What you need
 
 - An AWS account and the AWS CLI, signed in.
 - Terraform 1.6 or later.
-- Python 3.12 (the app also runs in other Python 3 versions that FastAPI supports).
-- The mirrord CLI build for serverless workloads, on your `PATH`.
-- A MetalBear API key for serverless workloads. It begins with `metalbear_key_`.
+- Python 3.10 or later.
+- The mirrord CLI, version 3.278.0 or later, on your `PATH`.
+- A MetalBear account. To generate the API key, you must be an admin of your MetalBear organization.
 
 > **Cost:** this creates billable resources: a NAT gateway, an Application Load Balancer, a `db.t4g.micro` RDS instance and one Fargate task. Run `terraform destroy` when you finish.
 
-## 1. Deploy the service to ECS
+## 1. Get an API key
+
+The ECS task signs in to MetalBear Cloud with the serverless agent API key of your organization. Your organization has one active key at a time. If it already has a key, ask the admin who generated it for the key, and go to the next step.
+
+1. Open the [MetalBear dashboard](https://app.metalbear.com), and go to **Settings → Serverless agents**.
+2. Generate the key.
+3. Copy the key, and keep it. It begins with `metalbear_key_`. The dashboard shows the key only once.
+
+## 2. Deploy the service to ECS
 
 ```bash
 cd terraform
@@ -40,16 +38,16 @@ terraform init
 terraform apply
 ```
 
-It takes about 10 minutes, mostly for RDS. When it finishes, keep the URL:
+It takes about 6 minutes, mostly for RDS. When it finishes, keep the URL:
 
 ```bash
 export URL=$(terraform output -raw url)
 curl $URL/orders
 ```
 
-The response comes from the ECS task, with `"version": "v1"`.
+The response comes from the ECS task, with `"version": "v1"`. The task needs 1 or 2 minutes to start after the apply. If the load balancer returns `503`, wait, and send the request again.
 
-## 2. Run the service locally with mirrord
+## 3. Run the service locally with mirrord
 
 Sign in once, and install the app's dependencies:
 
@@ -75,7 +73,15 @@ cd ..
 mirrord exec -f mirrord.json -- uvicorn main:app --app-dir app --port 8080
 ```
 
-## 3. See it work
+## 4. See it work
+
+`mirrord exec` keeps its terminal busy. Open a second terminal, go to the `terraform` directory, and set the URL again:
+
+```bash
+export URL=$(terraform output -raw url)
+```
+
+`mirrord.json` tells mirrord which requests to send to your laptop: only HTTP requests whose `baggage` header contains `mirrord-session=quickstart`. This is your session header. Each developer uses a different session key, so each one gets only their own requests. For more, see [How it works](#how-it-works).
 
 Send a request with your session header:
 
@@ -113,13 +119,15 @@ Change the code again, restart `mirrord exec`, and send the request again. There
 | `target.path` | `serverless/orders` | `MIRRORD_REMOTE_SERVICE` |
 | `target.namespace` | `quickstart` | `MIRRORD_REMOTE_ENVIRONMENT` |
 
+`"operator": false` makes mirrord connect through MetalBear Cloud. Without it, mirrord looks for an Operator in your current kubeconfig context, and uses it if it finds one.
+
 The task definition in [`terraform/ecs.tf`](terraform/ecs.tf) has the changes that make the service targetable:
 
 1. A setup container copies the mirrord remote bootstrap into a shared volume before the app starts.
 2. The app container loads the bootstrap with `LD_PRELOAD`. The app image does not change.
 3. ECS injects the API key from Secrets Manager as `MIRRORD_SESSIONS_MANAGER_API_KEY`.
 
-The task and your laptop both make only outbound HTTPS connections to MetalBear's sessions-manager, which pairs them. Nothing in your VPC accepts inbound connections from outside.
+The task and your laptop both make only outbound HTTPS connections to MetalBear's sessions-manager, which pairs them. mirrord needs no inbound access to your VPC. The public load balancer is part of the sample app, so that you can send requests to it.
 
 `mirrord.json` steals only HTTP requests whose `baggage` header carries the session key `quickstart`. To use a different key, change `key` in `mirrord.json` or set `MIRRORD_KEY`, and send that key in the header.
 
@@ -132,7 +140,7 @@ If you already run the mirrord Operator on EKS, the ECS task can connect through
 1. [Enable sessions-manager](https://metalbear.com/mirrord/docs/using-mirrord/serverless/operator-hosted) on the Operator.
 2. Bind the `mirrord-ecs-workloads` group to the `mirrord-operator-sessions-manager-agent` ClusterRole, as the [ECS operator guide](https://metalbear.com/mirrord/docs/using-mirrord/serverless/ecs-operator-hosted) shows.
 3. In `terraform.tfvars`, set `eks_cluster_name` instead of `mirrord_api_key`. Terraform creates a task role and maps it into that group with an EKS access entry.
-4. In `mirrord.json`, add `"operator": true`, and use a kubeconfig context for that cluster.
+4. In `mirrord.json`, change `"operator"` to `true`, and use a kubeconfig context for that cluster.
 
 This repo reaches the EKS API server through its public endpoint and the NAT gateway. If your API server is private only, follow the networking steps in the ECS operator guide.
 

@@ -22,6 +22,18 @@ variable "mirrord_api_key" {
   }
 }
 
+variable "mirrord_cloud_url" {
+  description = "MetalBear Cloud mode: the MetalBear Cloud origin. Leave unset to use the default."
+  type        = string
+  default     = null
+}
+
+variable "mirrord_sessions_manager_url" {
+  description = "MetalBear Cloud mode: the sessions-manager URL. Leave unset to use the default."
+  type        = string
+  default     = null
+}
+
 variable "eks_cluster_name" {
   description = "Operator-hosted mode: the EKS cluster that runs the mirrord Operator with sessions-manager enabled. Leave unset for MetalBear Cloud mode."
   type        = string
@@ -49,7 +61,7 @@ variable "mirrord_environment" {
 variable "mirrord_bootstrap_image" {
   description = "mirrord remote bootstrap image. Pin a release tag, not latest."
   type        = string
-  default     = "ghcr.io/metalbear-co/mirrord-remote-bootstrap:3.223.0"
+  default     = "ghcr.io/metalbear-co/mirrord-remote-bootstrap:3.224.0"
 }
 
 variable "app_image" {

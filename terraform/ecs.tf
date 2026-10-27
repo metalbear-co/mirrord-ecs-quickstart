@@ -54,13 +54,18 @@ resource "aws_iam_role_policy" "execution_secrets" {
 }
 
 locals {
-  # MetalBear Cloud mode needs only the API key. Operator-hosted mode needs the EKS
+  # MetalBear Cloud mode needs the API key, and the Cloud URLs only when they are not the defaults. Operator-hosted mode needs the EKS
   # endpoint, its CA, and the cluster name that the task signs its token for.
   mirrord_connection_env = local.operator_hosted ? [
     { name = "MIRRORD_OPERATOR_API_URL", value = data.aws_eks_cluster.operator[0].endpoint },
     { name = "MIRRORD_OPERATOR_EKS_CLUSTER_NAME", value = var.eks_cluster_name },
     { name = "MIRRORD_OPERATOR_API_CA_DATA", value = data.aws_eks_cluster.operator[0].certificate_authority[0].data },
-  ] : []
+    ] : [
+    for env in [
+      { name = "MIRRORD_METALBEAR_CLOUD_URL", value = var.mirrord_cloud_url },
+      { name = "MIRRORD_SESSIONS_MANAGER_URL", value = var.mirrord_sessions_manager_url },
+    ] : env if env.value != null
+  ]
 
   mirrord_connection_secrets = local.operator_hosted ? [] : [
     { name = "MIRRORD_SESSIONS_MANAGER_API_KEY", valueFrom = aws_secretsmanager_secret.mirrord_api_key[0].arn },
