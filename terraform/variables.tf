@@ -61,7 +61,7 @@ variable "mirrord_environment" {
 variable "mirrord_bootstrap_image" {
   description = "mirrord remote bootstrap image. Pin a release tag, not latest."
   type        = string
-  default     = "ghcr.io/metalbear-co/mirrord-remote-bootstrap:3.224.0"
+  default     = "ghcr.io/metalbear-co/mirrord-remote-bootstrap:3.230.0"
 }
 
 variable "app_image" {

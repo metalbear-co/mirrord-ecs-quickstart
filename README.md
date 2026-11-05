@@ -16,7 +16,7 @@ This repo deploys a small orders API to ECS on Fargate, next to a private Postgr
 - An AWS account and the AWS CLI, signed in.
 - Terraform 1.6 or later.
 - Python 3.10 or later.
-- The mirrord CLI, version 3.278.0 or later, on your `PATH`.
+- The mirrord CLI, version 3.282.0 or later, on your `PATH`.
 - A MetalBear account. To generate the API key, you must be an admin of your MetalBear organization.
 
 > **Cost:** this creates billable resources: a NAT gateway, an Application Load Balancer, a `db.t4g.micro` RDS instance and one Fargate task. Run `terraform destroy` when you finish.
